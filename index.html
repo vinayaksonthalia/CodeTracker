@@ -1,0 +1,286 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>CodeTracker</title>
+    
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    
+    <!-- React & ReactDOM (Development versions for CDN usage) -->
+    <script crossorigin src="https://unpkg.com/react@18/umd/react.development.js"></script>
+    <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.development.js"></script>
+    
+    <!-- Babel for in-browser JSX compilation -->
+    <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+</head>
+<body class="bg-gray-100 min-h-screen p-8 text-gray-800">
+    <div id="root"></div>
+
+    <script type="text/babel">
+        const { useState, useEffect, useMemo } = React;
+
+        const API_URL = "http://127.0.0.1:8000/problems";
+
+        function App() {
+            const [problems, setProblems] = useState([]);
+            const [formData, setFormData] = useState({
+                title: '',
+                difficulty: 'Easy',
+                pattern: '',
+                language: 'C++',
+                notes: '',
+                link: '' // Added link state
+            });
+            const [groupByPattern, setGroupByPattern] = useState(false);
+            const [collapsedPatterns, setCollapsedPatterns] = useState({});
+
+            // Fetch all problems from the backend
+            const fetchProblems = async () => {
+                try {
+                    const response = await fetch(API_URL);
+                    const data = await response.json();
+                    setProblems(data);
+                } catch (error) {
+                    console.error("Error fetching problems:", error);
+                }
+            };
+
+            // Load problems on initial mount
+            useEffect(() => {
+                fetchProblems();
+            }, []);
+
+            // Handle form input changes
+            const handleInputChange = (e) => {
+                const { name, value } = e.target;
+                setFormData({ ...formData, [name]: value });
+            };
+
+            // Submit new problem
+            const handleSubmit = async (e) => {
+                e.preventDefault();
+                try {
+                    const response = await fetch(API_URL, {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json',
+                        },
+                        body: JSON.stringify(formData),
+                    });
+                    
+                    if (response.ok) {
+                        setFormData({
+                            title: '',
+                            difficulty: 'Easy',
+                            pattern: '',
+                            language: 'C++',
+                            notes: '',
+                            link: ''
+                        });
+                        fetchProblems();
+                    }
+                } catch (error) {
+                    console.error("Error adding problem:", error);
+                }
+            };
+
+            // Delete a problem
+            const handleDelete = async (id) => {
+                try {
+                    const response = await fetch(`${API_URL}/${id}`, {
+                        method: 'DELETE',
+                    });
+                    if (response.ok) {
+                        fetchProblems();
+                    }
+                } catch (error) {
+                    console.error("Error deleting problem:", error);
+                }
+            };
+
+            const toggleCollapse = (pattern) => {
+                setCollapsedPatterns(prev => ({ ...prev, [pattern]: !prev[pattern] }));
+            };
+
+            const getDifficultyColor = (difficulty) => {
+                switch(difficulty) {
+                    case 'Easy': return 'bg-green-100 text-green-800';
+                    case 'Medium': return 'bg-yellow-100 text-yellow-800';
+                    case 'Hard': return 'bg-red-100 text-red-800';
+                    default: return 'bg-gray-100 text-gray-800';
+                }
+            };
+
+            // Group problems by pattern
+            const groupedProblems = useMemo(() => {
+                if (!groupByPattern) return null;
+                const groups = {};
+                problems.forEach(p => {
+                    const pat = p.pattern ? p.pattern.trim() : 'Uncategorized';
+                    if (!groups[pat]) groups[pat] = [];
+                    groups[pat].push(p);
+                });
+                return groups;
+            }, [problems, groupByPattern]);
+
+            // Helper function to render a table row
+            const renderRow = (problem) => (
+                <tr key={problem.id} className="hover:bg-gray-50 transition-colors border-b border-gray-100">
+                    <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
+                        {problem.link ? (
+                            <a href={problem.link.startsWith('http') ? problem.link : `https://${problem.link}`} target="_blank" rel="noopener noreferrer" className="text-blue-600 hover:text-blue-800 hover:underline">
+                                {problem.title}
+                            </a>
+                        ) : (
+                            problem.title
+                        )}
+                    </td>
+                    <td className="px-6 py-4 whitespace-nowrap text-sm">
+                        <span className={`px-3 py-1 inline-flex text-xs leading-5 font-semibold rounded-full ${getDifficultyColor(problem.difficulty)}`}>
+                            {problem.difficulty}
+                        </span>
+                    </td>
+                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-600">{problem.pattern || '-'}</td>
+                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-600">{problem.language}</td>
+                    <td className="px-6 py-4 text-sm text-gray-600 max-w-xs truncate" title={problem.notes}>{problem.notes || '-'}</td>
+                    <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
+                        <button 
+                            onClick={() => handleDelete(problem.id)} 
+                            className="text-red-500 hover:text-red-700 hover:underline focus:outline-none transition-colors"
+                        >
+                            Delete
+                        </button>
+                    </td>
+                </tr>
+            );
+
+            return (
+                <div className="max-w-6xl mx-auto space-y-8 pb-10">
+                    <h1 className="text-4xl font-bold text-center text-blue-900 mb-8 tracking-tight">CodeTracker</h1>
+                    
+                    {/* Add Problem Form */}
+                    <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-100">
+                        <h2 className="text-xl font-semibold mb-6 text-gray-700">Add New Problem</h2>
+                        <form onSubmit={handleSubmit} className="space-y-5">
+                            <div className="grid grid-cols-1 md:grid-cols-3 gap-5">
+                                <div>
+                                    <label className="block text-sm font-medium text-gray-700 mb-1">Title *</label>
+                                    <input required type="text" name="title" value={formData.title} onChange={handleInputChange} className="w-full rounded-md border-gray-300 border p-2.5 focus:border-blue-500 focus:ring-1 focus:ring-blue-500 outline-none transition" placeholder="e.g. Two Sum" />
+                                </div>
+                                <div>
+                                    <label className="block text-sm font-medium text-gray-700 mb-1">Difficulty *</label>
+                                    <select name="difficulty" value={formData.difficulty} onChange={handleInputChange} className="w-full rounded-md border-gray-300 border p-2.5 focus:border-blue-500 focus:ring-1 focus:ring-blue-500 outline-none transition bg-white">
+                                        <option value="Easy">Easy</option>
+                                        <option value="Medium">Medium</option>
+                                        <option value="Hard">Hard</option>
+                                    </select>
+                                </div>
+                                <div>
+                                    <label className="block text-sm font-medium text-gray-700 mb-1">Pattern</label>
+                                    <input type="text" name="pattern" value={formData.pattern} onChange={handleInputChange} placeholder="e.g. Sliding Window" className="w-full rounded-md border-gray-300 border p-2.5 focus:border-blue-500 focus:ring-1 focus:ring-blue-500 outline-none transition" />
+                                </div>
+                                <div>
+                                    <label className="block text-sm font-medium text-gray-700 mb-1">Language</label>
+                                    <input type="text" name="language" value={formData.language} onChange={handleInputChange} className="w-full rounded-md border-gray-300 border p-2.5 focus:border-blue-500 focus:ring-1 focus:ring-blue-500 outline-none transition" />
+                                </div>
+                                <div className="md:col-span-2">
+                                    <label className="block text-sm font-medium text-gray-700 mb-1">Link (URL)</label>
+                                    <input type="url" name="link" value={formData.link} onChange={handleInputChange} placeholder="https://leetcode.com/..." className="w-full rounded-md border-gray-300 border p-2.5 focus:border-blue-500 focus:ring-1 focus:ring-blue-500 outline-none transition" />
+                                </div>
+                            </div>
+                            <div>
+                                <label className="block text-sm font-medium text-gray-700 mb-1">Notes</label>
+                                <textarea name="notes" value={formData.notes} onChange={handleInputChange} rows="2" placeholder="Any key takeaways or tricks?" className="w-full rounded-md border-gray-300 border p-2.5 focus:border-blue-500 focus:ring-1 focus:ring-blue-500 outline-none transition"></textarea>
+                            </div>
+                            <button type="submit" className="w-full bg-blue-600 text-white font-semibold py-2.5 px-4 rounded-md hover:bg-blue-700 transition-colors shadow-sm">
+                                Add Problem
+                            </button>
+                        </form>
+                    </div>
+
+                    {/* Problems List Controls */}
+                    <div className="flex justify-between items-center px-2">
+                        <h2 className="text-2xl font-bold text-gray-800">Your Problems ({problems.length})</h2>
+                        <button 
+                            onClick={() => setGroupByPattern(!groupByPattern)}
+                            className={`px-5 py-2 rounded-lg font-medium text-sm transition-all shadow-sm ${groupByPattern ? 'bg-indigo-600 text-white hover:bg-indigo-700' : 'bg-white text-gray-700 border border-gray-300 hover:bg-gray-50'}`}
+                        >
+                            {groupByPattern ? 'Ungroup' : 'Group by Pattern'}
+                        </button>
+                    </div>
+
+                    {/* Problems Display */}
+                    <div className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
+                        <div className="overflow-x-auto">
+                            <table className="min-w-full">
+                                <thead className="bg-gray-50 border-b border-gray-200">
+                                    <tr>
+                                        <th className="px-6 py-4 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">Title</th>
+                                        <th className="px-6 py-4 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">Difficulty</th>
+                                        <th className="px-6 py-4 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">Pattern</th>
+                                        <th className="px-6 py-4 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">Language</th>
+                                        <th className="px-6 py-4 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">Notes</th>
+                                        <th className="px-6 py-4 text-right text-xs font-semibold text-gray-500 uppercase tracking-wider">Actions</th>
+                                    </tr>
+                                </thead>
+                                
+                                {!groupByPattern ? (
+                                    <tbody className="bg-white">
+                                        {problems.map(renderRow)}
+                                        {problems.length === 0 && (
+                                            <tr>
+                                                <td colSpan="6" className="px-6 py-8 text-center text-sm text-gray-500 bg-gray-50">
+                                                    No problems logged yet. Time to start coding! 🚀
+                                                </td>
+                                            </tr>
+                                        )}
+                                    </tbody>
+                                ) : (
+                                    Object.entries(groupedProblems).map(([pattern, patternProblems]) => (
+                                        <React.Fragment key={pattern}>
+                                            <tbody>
+                                                <tr 
+                                                    className="bg-indigo-50 border-b border-indigo-100 cursor-pointer hover:bg-indigo-100 transition-colors"
+                                                    onClick={() => toggleCollapse(pattern)}
+                                                >
+                                                    <td colSpan="6" className="px-6 py-3 text-sm font-bold text-indigo-900">
+                                                        <div className="flex items-center">
+                                                            <span className="mr-2 text-indigo-500 w-4 inline-block text-center">
+                                                                {collapsedPatterns[pattern] ? '▶' : '▼'}
+                                                            </span>
+                                                            {pattern} 
+                                                            <span className="ml-2 text-xs bg-indigo-200 text-indigo-800 py-0.5 px-2.5 rounded-full">
+                                                                {patternProblems.length}
+                                                            </span>
+                                                        </div>
+                                                    </td>
+                                                </tr>
+                                            </tbody>
+                                            {!collapsedPatterns[pattern] && (
+                                                <tbody className="bg-white">
+                                                    {patternProblems.map(renderRow)}
+                                                </tbody>
+                                            )}
+                                        </React.Fragment>
+                                    ))
+                                )}
+                            </table>
+                            
+                            {groupByPattern && problems.length === 0 && (
+                                <div className="px-6 py-8 text-center text-sm text-gray-500 bg-gray-50">
+                                    No problems logged yet. Time to start coding! 🚀
+                                </div>
+                            )}
+                        </div>
+                    </div>
+                </div>
+            );
+        }
+
+        const root = ReactDOM.createRoot(document.getElementById('root'));
+        root.render(<App />);
+    </script>
+</body>
+</html>
